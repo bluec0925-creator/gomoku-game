@@ -1,0 +1,634 @@
+
+html_content = '''<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>五子棋对战 - 点对点联机</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 10px;
+            touch-action: manipulation;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 800px;
+            width: 100%;
+        }
+        h1 { text-align: center; color: #333; margin-bottom: 6px; font-size: 1.8em; }
+        .subtitle { text-align: center; color: #666; margin-bottom: 20px; font-size: 0.85em; }
+        .game-layout { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+        .board-section { display: flex; flex-direction: column; align-items: center; }
+        
+        #board {
+            display: grid;
+            grid-template-columns: repeat(15, 32px);
+            grid-template-rows: repeat(15, 32px);
+            gap: 0;
+            background: #dcb35c;
+            padding: 16px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            position: relative;
+            touch-action: none;
+        }
+        
+        .cell {
+            width: 32px; height: 32px;
+            position: relative;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .cell::before {
+            content: ''; position: absolute;
+            width: 100%; height: 1px;
+            background: #8b6914; top: 50%; left: 0;
+        }
+        .cell::after {
+            content: ''; position: absolute;
+            width: 1px; height: 100%;
+            background: #8b6914; left: 50%; top: 0;
+        }
+        
+        .stone {
+            width: 28px; height: 28px;
+            border-radius: 50%;
+            position: absolute;
+            z-index: 10;
+            transition: transform 0.1s;
+            box-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            pointer-events: none;
+        }
+        .stone.black { background: radial-gradient(circle at 30% 30%, #555, #000); }
+        .stone.white { background: radial-gradient(circle at 30% 30%, #fff, #ddd); border: 1px solid #ccc; }
+        .stone.last-move { box-shadow: 0 0 0 3px #ff6b6b, 2px 2px 4px rgba(0,0,0,0.3); }
+        
+        .cell:hover .stone-placeholder {
+            width: 28px; height: 28px;
+            border-radius: 50%;
+            background: rgba(0,0,0,0.1);
+            position: absolute; z-index: 5;
+        }
+        .cell:hover .stone-placeholder.white-placeholder { background: rgba(255,255,255,0.3); border: 1px solid rgba(0,0,0,0.1); }
+        
+        .controls { display: flex; flex-direction: column; gap: 16px; min-width: 260px; flex: 1; }
+        
+        .status-card {
+            background: #f8f9fa; border-radius: 12px;
+            padding: 16px; border-left: 4px solid #667eea;
+        }
+        .status-title { font-size: 0.8em; color: #666; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px; }
+        .status-value { font-size: 1.1em; font-weight: 600; color: #333; }
+        .status-value.waiting { color: #f59e0b; }
+        .status-value.playing { color: #10b981; }
+        .status-value.winner { color: #ef4444; }
+        
+        .btn {
+            padding: 12px 20px; border: none; border-radius: 8px;
+            font-size: 0.95em; cursor: pointer; transition: all 0.2s;
+            font-weight: 600; width: 100%; -webkit-appearance: none;
+        }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-primary:hover { background: #5568d3; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4); }
+        .btn-secondary { background: #e5e7eb; color: #374151; }
+        .btn-secondary:hover { background: #d1d5db; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+        
+        .connection-panel {
+            background: #f0f4ff; border-radius: 12px;
+            padding: 16px; border: 2px dashed #667eea;
+        }
+        .input-group { display: flex; gap: 8px; margin-top: 10px; }
+        input[type="text"] {
+            flex: 1; padding: 10px; border: 2px solid #e5e7eb;
+            border-radius: 6px; font-size: 0.9em; outline: none;
+            transition: border-color 0.2s; -webkit-appearance: none;
+        }
+        input[type="text"]:focus { border-color: #667eea; }
+        
+        .share-link {
+            background: #fff; border: 2px solid #e5e7eb;
+            border-radius: 8px; padding: 12px;
+            font-size: 0.8em; word-break: break-all;
+            color: #667eea; cursor: pointer;
+            transition: all 0.2s; margin-top: 10px;
+            user-select: all;
+        }
+        .share-link:hover { border-color: #667eea; background: #f0f4ff; }
+        .share-link.copied { background: #d1fae5; border-color: #10b981; color: #065f46; }
+        
+        .log {
+            background: #1f2937; color: #e5e7eb;
+            border-radius: 8px; padding: 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.8em; max-height: 140px;
+            overflow-y: auto; line-height: 1.5;
+        }
+        .log-entry { margin-bottom: 4px; }
+        .log-entry.system { color: #9ca3af; }
+        .log-entry.info { color: #60a5fa; }
+        .log-entry.success { color: #34d399; }
+        .log-entry.error { color: #f87171; }
+        
+        .player-indicator { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+        .player-dot { width: 18px; height: 18px; border-radius: 50%; box-shadow: 1px 1px 3px rgba(0,0,0,0.3); }
+        .player-dot.black { background: radial-gradient(circle at 30% 30%, #555, #000); }
+        .player-dot.white { background: radial-gradient(circle at 30% 30%, #fff, #ddd); border: 1px solid #ccc; }
+        
+        .hidden { display: none !important; }
+        
+        .winner-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7); display: none;
+            justify-content: center; align-items: center;
+            z-index: 1000; backdrop-filter: blur(5px);
+        }
+        .winner-modal {
+            background: white; padding: 30px; border-radius: 20px;
+            text-align: center; animation: popIn 0.3s ease-out;
+            margin: 20px; max-width: 400px; width: 100%;
+        }
+        @keyframes popIn {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        .winner-modal h2 { font-size: 1.8em; margin-bottom: 16px; color: #333; }
+        .winner-modal p { color: #666; margin-bottom: 24px; }
+        
+        .qr-section { text-align: center; margin-top: 12px; }
+        #qrcode { display: inline-block; padding: 8px; background: white; border-radius: 8px; }
+        
+        @media (max-width: 640px) {
+            .container { padding: 12px; border-radius: 12px; }
+            h1 { font-size: 1.5em; }
+            #board {
+                grid-template-columns: repeat(15, 24px);
+                grid-template-rows: repeat(15, 24px);
+                padding: 12px;
+            }
+            .cell { width: 24px; height: 24px; }
+            .stone, .cell:hover .stone-placeholder { width: 20px; height: 20px; }
+            .controls { min-width: unset; width: 100%; }
+            .game-layout { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚫ 五子棋对战 ⚪</h1>
+        <p class="subtitle">基于 WebRTC 的点对点联机，无需服务器</p>
+        
+        <div class="game-layout">
+            <div class="board-section">
+                <div id="board"></div>
+            </div>
+            
+            <div class="controls">
+                <div class="status-card">
+                    <div class="status-title">游戏状态</div>
+                    <div class="status-value waiting" id="status">等待连接...</div>
+                    <div class="player-indicator hidden" id="playerIndicator">
+                        <div class="player-dot" id="playerDot"></div>
+                        <span id="playerText">你是黑棋</span>
+                    </div>
+                </div>
+
+                <div class="connection-panel" id="connectionPanel">
+                    <div id="createSection">
+                        <button class="btn btn-primary" id="btnCreate">创建房间</button>
+                    </div>
+                    
+                    <div id="joinSection" class="hidden">
+                        <div style="margin-bottom: 10px; font-size: 0.9em; color: #666;">
+                            或输入对方提供的房间 ID：
+                        </div>
+                        <div class="input-group">
+                            <input type="text" id="roomInput" placeholder="输入房间 ID..." maxlength="6">
+                            <button class="btn btn-secondary" id="btnJoin">加入</button>
+                        </div>
+                    </div>
+
+                    <div id="shareSection" class="hidden">
+                        <div style="margin-bottom: 10px; font-size: 0.9em; color: #666;">
+                            分享此链接邀请对手：
+                        </div>
+                        <div class="share-link" id="shareLink"></div>
+                        <div class="qr-section">
+                            <div id="qrcode"></div>
+                        </div>
+                        <div style="margin-top: 8px; font-size: 0.75em; color: #999; text-align: center;">
+                            点击链接可复制，扫码也可加入
+                        </div>
+                    </div>
+                </div>
+
+                <div class="status-card hidden" id="gameControls">
+                    <button class="btn btn-secondary" id="btnRestart">重新开始</button>
+                </div>
+
+                <div class="log" id="log">
+                    <div class="log-entry system">系统就绪，请选择创建房间或加入房间</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="winner-overlay" id="winnerOverlay">
+        <div class="winner-modal">
+            <h2 id="winnerText">黑棋获胜！</h2>
+            <p>再来一局？</p>
+            <button class="btn btn-primary" id="btnNewGame">重新开始</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script>
+        const ICE_SERVERS = [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' }
+        ];
+        
+        const BOARD_SIZE = 15;
+        const SIGNAL_SERVER = 'wss://websocket-server-for-webrtc.glitch.me/';
+
+        let board = [], currentPlayer = 'black', myColor = null;
+        let isMyTurn = false, gameActive = false, lastMove = null;
+        let ws = null, peerConnection = null, dataChannel = null;
+        let roomId = null, isHost = false;
+
+        const boardEl = document.getElementById('board');
+        const statusEl = document.getElementById('status');
+        const logEl = document.getElementById('log');
+        const connectionPanel = document.getElementById('connectionPanel');
+        const createSection = document.getElementById('createSection');
+        const joinSection = document.getElementById('joinSection');
+        const shareSection = document.getElementById('shareSection');
+        const shareLinkEl = document.getElementById('shareLink');
+        const playerIndicator = document.getElementById('playerIndicator');
+        const playerDot = document.getElementById('playerDot');
+        const playerText = document.getElementById('playerText');
+        const gameControls = document.getElementById('gameControls');
+        const winnerOverlay = document.getElementById('winnerOverlay');
+        const winnerText = document.getElementById('winnerText');
+
+        function log(msg, type = 'system') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function initBoard() {
+            boardEl.innerHTML = '';
+            board = Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(null));
+            
+            for (let y = 0; y < BOARD_SIZE; y++) {
+                for (let x = 0; x < BOARD_SIZE; x++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.x = x;
+                    cell.dataset.y = y;
+                    
+                    const placeholder = document.createElement('div');
+                    placeholder.className = 'stone-placeholder';
+                    cell.appendChild(placeholder);
+                    
+                    cell.addEventListener('click', () => handleCellClick(x, y));
+                    cell.addEventListener('mouseenter', () => {
+                        if (gameActive && isMyTurn && !board[y][x]) {
+                            placeholder.className = `stone-placeholder ${myColor}-placeholder`;
+                        }
+                    });
+                    
+                    boardEl.appendChild(cell);
+                }
+            }
+        }
+
+        function handleCellClick(x, y) {
+            if (!gameActive || !isMyTurn || board[y][x]) return;
+            
+            placeStone(x, y, myColor);
+            sendMove(x, y);
+            
+            if (checkWin(x, y, myColor)) {
+                endGame(myColor);
+            } else {
+                switchTurn();
+            }
+        }
+
+        function placeStone(x, y, color) {
+            board[y][x] = color;
+            const cell = boardEl.children[y * BOARD_SIZE + x];
+            
+            if (lastMove) {
+                const lastCell = boardEl.children[lastMove.y * BOARD_SIZE + lastMove.x];
+                const lastStone = lastCell.querySelector('.stone');
+                if (lastStone) lastStone.classList.remove('last-move');
+            }
+            
+            const stone = document.createElement('div');
+            stone.className = `stone ${color} last-move`;
+            cell.appendChild(stone);
+            lastMove = { x, y };
+        }
+
+        function switchTurn() {
+            isMyTurn = !isMyTurn;
+            currentPlayer = currentPlayer === 'black' ? 'white' : 'black';
+            updateStatus();
+        }
+
+        function updateStatus() {
+            if (!gameActive) return;
+            if (isMyTurn) {
+                statusEl.textContent = '轮到你了';
+                statusEl.className = 'status-value playing';
+            } else {
+                statusEl.textContent = '等待对手...';
+                statusEl.className = 'status-value waiting';
+            }
+        }
+
+        function checkWin(x, y, color) {
+            const directions = [[1, 0], [0, 1], [1, 1], [1, -1]];
+            for (const [dx, dy] of directions) {
+                let count = 1;
+                for (let i = 1; i < 5; i++) {
+                    const nx = x + dx * i, ny = y + dy * i;
+                    if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE || board[ny][nx] !== color) break;
+                    count++;
+                }
+                for (let i = 1; i < 5; i++) {
+                    const nx = x - dx * i, ny = y - dy * i;
+                    if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE || board[ny][nx] !== color) break;
+                    count++;
+                }
+                if (count >= 5) return true;
+            }
+            return false;
+        }
+
+        function endGame(winner) {
+            gameActive = false;
+            const winnerName = winner === myColor ? '你' : (winner === 'black' ? '黑棋' : '白棋');
+            winnerText.textContent = `${winnerName}获胜！`;
+            winnerOverlay.style.display = 'flex';
+            log(`游戏结束：${winner === 'black' ? '黑棋' : '白棋'}获胜`, 'success');
+        }
+
+        function generateRoomId() {
+            return Math.random().toString(36).substring(2, 8).toUpperCase();
+        }
+
+        function initWebSocket() {
+            return new Promise((resolve, reject) => {
+                ws = new WebSocket(SIGNAL_SERVER);
+                ws.onopen = () => { log('信令服务器已连接'); resolve(); };
+                ws.onmessage = async (event) => {
+                    const msg = JSON.parse(event.data);
+                    await handleSignal(msg);
+                };
+                ws.onerror = () => { log('信令服务器连接失败', 'error'); reject(); };
+                ws.onclose = () => { log('信令服务器断开'); };
+            });
+        }
+
+        async function createRoom() {
+            try {
+                await initWebSocket();
+                roomId = generateRoomId();
+                isHost = true;
+                myColor = 'black';
+                
+                log(`创建房间: ${roomId}`);
+                
+                const url = new URL(window.location.href);
+                url.searchParams.set('room', roomId);
+                const shareUrl = url.toString();
+                shareLinkEl.textContent = shareUrl;
+                
+                // 生成二维码
+                document.getElementById('qrcode').innerHTML = '';
+                new QRCode(document.getElementById('qrcode'), {
+                    text: shareUrl,
+                    width: 128,
+                    height: 128,
+                    colorDark: '#667eea',
+                    colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.M
+                });
+                
+                createSection.classList.add('hidden');
+                joinSection.classList.add('hidden');
+                shareSection.classList.remove('hidden');
+                statusEl.textContent = '等待对手加入...';
+                
+                ws.send(JSON.stringify({ type: 'create', room: roomId }));
+            } catch (e) {
+                log('创建房间失败', 'error');
+            }
+        }
+
+        async function joinRoom(id) {
+            try {
+                await initWebSocket();
+                roomId = id.toUpperCase();
+                isHost = false;
+                myColor = 'white';
+                
+                log(`加入房间: ${roomId}`);
+                ws.send(JSON.stringify({ type: 'join', room: roomId }));
+                
+                createSection.classList.add('hidden');
+                joinSection.classList.add('hidden');
+            } catch (e) {
+                log('加入房间失败', 'error');
+            }
+        }
+
+        async function handleSignal(msg) {
+            switch (msg.type) {
+                case 'peer-joined':
+                    log('对手已加入，建立连接...', 'info');
+                    await createPeerConnection();
+                    const offer = await peerConnection.createOffer();
+                    await peerConnection.setLocalDescription(offer);
+                    ws.send(JSON.stringify({ type: 'offer', room: roomId, sdp: offer.sdp }));
+                    break;
+                case 'offer':
+                    log('收到连接请求', 'info');
+                    await createPeerConnection();
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: msg.sdp }));
+                    const answer = await peerConnection.createAnswer();
+                    await peerConnection.setLocalDescription(answer);
+                    ws.send(JSON.stringify({ type: 'answer', room: roomId, sdp: answer.sdp }));
+                    break;
+                case 'answer':
+                    log('连接已确认', 'success');
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: msg.sdp }));
+                    break;
+                case 'ice-candidate':
+                    if (msg.candidate && peerConnection) {
+                        await peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate));
+                    }
+                    break;
+                case 'error':
+                    log(msg.message, 'error');
+                    break;
+            }
+        }
+
+        async function createPeerConnection() {
+            peerConnection = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+            
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    ws.send(JSON.stringify({ type: 'ice-candidate', room: roomId, candidate: event.candidate }));
+                }
+            };
+            
+            if (isHost) {
+                dataChannel = peerConnection.createDataChannel('game');
+                setupDataChannel();
+            } else {
+                peerConnection.ondatachannel = (event) => {
+                    dataChannel = event.channel;
+                    setupDataChannel();
+                };
+            }
+        }
+
+        function setupDataChannel() {
+            dataChannel.onopen = () => {
+                log('点对点连接成功！', 'success');
+                startGame();
+            };
+            dataChannel.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                handleGameMessage(msg);
+            };
+            dataChannel.onclose = () => {
+                log('连接已断开', 'error');
+                statusEl.textContent = '对手断开连接';
+            };
+        }
+
+        function sendMove(x, y) {
+            if (dataChannel && dataChannel.readyState === 'open') {
+                dataChannel.send(JSON.stringify({ type: 'move', x, y, color: myColor }));
+            }
+        }
+
+        function handleGameMessage(msg) {
+            switch (msg.type) {
+                case 'move':
+                    placeStone(msg.x, msg.y, msg.color);
+                    if (checkWin(msg.x, msg.y, msg.color)) {
+                        endGame(msg.color);
+                    } else {
+                        switchTurn();
+                    }
+                    break;
+                case 'restart':
+                    resetGame();
+                    break;
+            }
+        }
+
+        function startGame() {
+            gameActive = true;
+            isMyTurn = isHost;
+            currentPlayer = 'black';
+            
+            connectionPanel.classList.add('hidden');
+            gameControls.classList.remove('hidden');
+            playerIndicator.classList.remove('hidden');
+            
+            playerDot.className = `player-dot ${myColor}`;
+            playerText.textContent = `你是${myColor === 'black' ? '黑棋' : '白棋'}${isHost ? '（先手）' : ''}`;
+            
+            updateStatus();
+            log('游戏开始！', 'success');
+        }
+
+        function resetGame() {
+            initBoard();
+            gameActive = true;
+            isMyTurn = isHost;
+            currentPlayer = 'black';
+            lastMove = null;
+            winnerOverlay.style.display = 'none';
+            updateStatus();
+            log('重新开始');
+        }
+
+        function sendRestart() {
+            if (dataChannel && dataChannel.readyState === 'open') {
+                dataChannel.send(JSON.stringify({ type: 'restart' }));
+            }
+            resetGame();
+        }
+
+        document.getElementById('btnCreate').addEventListener('click', createRoom);
+        document.getElementById('btnJoin').addEventListener('click', () => {
+            const id = document.getElementById('roomInput').value.trim();
+            if (id) joinRoom(id);
+        });
+        document.getElementById('roomInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const id = e.target.value.trim();
+                if (id) joinRoom(id);
+            }
+        });
+        document.getElementById('btnRestart').addEventListener('click', sendRestart);
+        document.getElementById('btnNewGame').addEventListener('click', sendRestart);
+        
+        shareLinkEl.addEventListener('click', () => {
+            navigator.clipboard.writeText(shareLinkEl.textContent).then(() => {
+                shareLinkEl.classList.add('copied');
+                const original = shareLinkEl.textContent;
+                shareLinkEl.textContent = '已复制到剪贴板！';
+                setTimeout(() => {
+                    shareLinkEl.classList.remove('copied');
+                    shareLinkEl.textContent = original;
+                }, 2000);
+            });
+        });
+
+        initBoard();
+        
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomParam = urlParams.get('room');
+        if (roomParam) {
+            document.getElementById('roomInput').value = roomParam;
+            joinSection.classList.remove('hidden');
+            createSection.classList.add('hidden');
+            log(`检测到房间 ID: ${roomParam}，点击加入即可开始对局`);
+        } else {
+            joinSection.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>'''
+
+with open('/mnt/agents/output/index.html', 'w', encoding='utf-8') as f:
+    f.write(html_content)
+
+print("✅ 已生成 index.html 文件")
+print(f"📄 文件大小: {len(html_content)} 字符")
